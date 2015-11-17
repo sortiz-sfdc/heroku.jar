@@ -1,18 +1,41 @@
 package com.heroku.api.connection;
 
-import com.heroku.api.Heroku;
-import com.heroku.api.http.Http;
-import com.heroku.api.http.HttpUtil;
-import com.heroku.api.request.Request;
-import org.apache.http.*;
-import org.apache.http.auth.*;
+import static com.heroku.api.Heroku.Config.ENDPOINT;
+
+import java.io.IOException;
+import java.net.URL;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+
+import org.apache.http.HttpException;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpRequestInterceptor;
+import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScheme;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.AuthState;
+import org.apache.http.auth.Credentials;
+import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.auth.params.AuthPNames;
 import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.methods.*;
+import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.params.AuthPolicy;
 import org.apache.http.client.params.ClientPNames;
 import org.apache.http.client.params.CookiePolicy;
 import org.apache.http.client.protocol.ClientContext;
+import org.apache.http.conn.params.ConnRoutePNames;
 import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.conn.ssl.SSLSocketFactory;
@@ -24,14 +47,10 @@ import org.apache.http.protocol.BasicHttpContext;
 import org.apache.http.protocol.ExecutionContext;
 import org.apache.http.protocol.HttpContext;
 
-import java.io.IOException;
-import java.net.URL;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import java.util.concurrent.*;
-
-import static com.heroku.api.Heroku.Config.ENDPOINT;
+import com.heroku.api.Heroku;
+import com.heroku.api.http.Http;
+import com.heroku.api.http.HttpUtil;
+import com.heroku.api.request.Request;
 
 public class HttpClientConnection implements FutureConnection {
 
@@ -152,6 +171,28 @@ public class HttpClientConnection implements FutureConnection {
         DefaultHttpClient defaultHttpClient = new DefaultHttpClient(ccm);
         defaultHttpClient.getParams().setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.IGNORE_COOKIES);
         defaultHttpClient.getParams().setParameter(AuthPNames.TARGET_AUTH_PREF, Arrays.asList(AuthPolicy.BASIC));
+        
+        //Set a proxy, if defined
+        String proxyHost = System.getProperty("https.proxyHost");
+        if (proxyHost != null && proxyHost.length() > 0) {
+        	String proxyPortStr = System.getProperty("https.proxyPort");
+            HttpHost proxy = null;
+            if (proxyPortStr != null && proxyPortStr.length() > 0) {
+            	int port = 80;	//Default port as defined in Java
+            	try {
+            		port = Integer.parseInt(proxyPortStr);
+            	} catch (NumberFormatException e) {
+            		//Must not be a valid number, ignore it and use the default port settings
+            	}
+            	proxy = new HttpHost(proxyHost, port);
+            } else {
+            	proxy = new HttpHost(proxyHost);
+            }
+
+            //Set the proxy
+            defaultHttpClient.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
+        }
+        
         return defaultHttpClient;
     }
 
